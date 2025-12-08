@@ -1,7 +1,7 @@
 \section{SODA-QFT: Semantic Dynamics and Multi-Field Quantum Evolution}
 \label{sec:soda_qft}
 
-The final extension of the SODA framework integrates Quantum Field Theory (QFT) and Semantic Information Theory, resulting in the \textbf{SODA-QFT engine}: a multi-field, semantically grounded, GPU-accelerated evolutionary system. Each Nucleus no longer carries a single complex state $\psi_j$, but instead a \textit{spinor-valued quantum field}:
+The SODA framework is extended to integrate Quantum Field Theory (QFT) and Semantic Information Theory, resulting in the \textbf{SODA-QFT engine}: a multi-field, semantically grounded, GPU-accelerated evolutionary system. Each Nucleus no longer carries a single complex state $\psi_j$, but a \textit{multi-field spinor} (vector of complex wavefunctions):
 
 \[
 \Psi_j = 
@@ -14,11 +14,14 @@ The final extension of the SODA framework integrates Quantum Field Theory (QFT) 
 \in \mathbb{C}^F,
 \]
 
-where each component corresponds to a structural modality (Chaos, Bayesian, Spiking-Neural, etc.), enabling multi-perspective reasoning and cross-field information transfer.
+where each component corresponds to a structural modality (Chaos, Bayesian, SNN, etc.), enabling multi-perspective reasoning and cross-field information transfer. The dimensionality $F$ is typically small ($F \le 8$).
 
-\subsection{Multi-Field Quantum Kuramoto Map}
+---
 
-The Quantum Kuramoto Map (QKM) is generalized to account for cross-field interactions through the multi-field coupling tensor $J_{jk}^{(a,b)}$:
+\subsection{Multi-Field Fused Quantum Kuramoto Map (QKM)}
+\label{sec:qkm_multi}
+
+The QKM is generalized to account for cross-field interactions. The update rule for the target field $a$ of Nucleus $j$ is defined by the total coupling sum $S_j^{(a)}$, which integrates contributions from all source fields $b$ across all Nuclei $k$:
 
 \[
 \Psi_j(t+1) 
@@ -35,28 +38,25 @@ J_{jk}^{(a,b)}
 \right].
 \]
 
-This coupling tensor encodes three distinct effects:
-
-\begin{enumerate}
-    \item \textbf{Fitness Proximity}: $e^{-|f_j - f_k| / T}$ ensures poorly aligned solutions are de-emphasized.
-    \item \textbf{Entropy Polarity}: $e^{-|H_j - H_k|}$ encourages exploration when diversity is high.
-    \item \textbf{Semantic Interaction}: $\Lambda_{ab}$ models the compatibility between fields $a$ and $b$, based on cross-field semantic similarity.
-\end{enumerate}
-
-Together, they form:
+The multi-field coupling tensor $J_{jk}^{(a,b)}$ encodes three critical interaction effects:
 
 \[
 J_{jk}^{(a,b)} = 
-\exp\left( -\frac{|f_j^{(a)} - f_k^{(b)}|}{T} \right)
+\underbrace{\exp\left( -\frac{|f_j^{(a)} - f_k^{(b)}|}{T} \right)}_{\text{Fitness Proximity}}
 \cdot 
-\exp\left( -|H_j^{(a)} - H_k^{(b)}| \right)
+\underbrace{\exp\left( -|H_j^{(a)} - H_k^{(b)}| \right)}_{\text{Entropy Polarity}}
 \cdot 
-\Lambda_{ab}.
+\underbrace{\Lambda_{ab}}_{\text{Semantic Interaction}}.
 \]
 
-\subsection{Semantic Interaction Matrix $\Lambda$}
+The interaction is minimized for high error/dissimilarity (Fitness Proximity) and maximized by high divergence (Entropy Polarity) and high semantic compatibility ($\Lambda_{ab}$).
 
-The Semantic Interaction Matrix encodes the \textit{meaning-level compatibility} between fields, derived from information geometry:
+---
+
+\subsection{Semantic Interaction Matrix $\Lambda$ (Meaning as a Field)}
+\label{sec:semantic_lambda}
+
+The **Semantic Interaction Matrix $\mathbf{\Lambda}$** replaces the static coupling factor $G$. It measures the semantic compatibility $\lambda_{ab}$ between field $a$ and field $b$, derived from their information geometry (embeddings $\mathbf{e}_a$):
 
 \[
 \Lambda = 
@@ -68,7 +68,7 @@ The Semantic Interaction Matrix encodes the \textit{meaning-level compatibility}
 \end{bmatrix}.
 \]
 
-Each element $\lambda_{ab}$ is computed from semantic embeddings $\mathbf{e}_a$ and $\mathbf{e}_b$ of field-types:
+We adopt the softmax-normalized cosine similarity (based on per-field embeddings $\mathbf{e}$) to dynamically compute $\lambda_{ab}$:
 
 \[
 \lambda_{ab} 
@@ -78,65 +78,45 @@ Each element $\lambda_{ab}$ is computed from semantic embeddings $\mathbf{e}_a$ 
 }{
 \sum_{c=1}^{F} 
 \exp\left( \frac{\cos(\mathbf{e}_a, \mathbf{e}_c)}{\tau} \right)
-},
+}.
 \]
 
-where $\tau$ is a temperature parameter controlling semantic sharpness.  
-Thus, $\Lambda$ enables the system to reason using \textbf{meaning}, not only signal-level interactions.
+This mechanism establishes that **meaning is modeled as an interaction field**, shaping how distributed computational entities interfere, synchronize, and evolve.
 
-\subsection{Quantum Field Fusion and Structural Evolution}
+---
 
-Fusion and Decomposition now operate not on scalar nodes but on \textit{spinor fields}.  
-When entropy concentration is high, SODA-QFT performs:
+\subsection{Quantum Field Evolution and GPU Acceleration}
 
-\[
-\Psi_{\text{fused}} = 
-\frac{
-\sum_{j \in \mathcal{C}} H_j \Psi_j
-}{
-\sum_{j \in \mathcal{C}} H_j
-},
-\]
+The structural dynamics (Fusion and Decomposition) operate directly on the spinor field $\Psi$.
 
-producing higher-order ``field condensates’’ analogous to bound states in quantum many-body systems.
-
-Decomposition similarly splits low-fitness multi-field Nuclei into semantically perturbed offspring:
-
-\[
-\Psi_{j,\text{child}} 
-= 
-\Psi_j + \epsilon \cdot \mathcal{N}(0, \Lambda).
-\]
-
-This connects semantic geometry directly to structural dynamics, forming the world’s first \textbf{Semantic Quantum Field Evolution Mechanism}.
-
-\subsection{GPU Fused Kernel Acceleration}
-
-To support multi-field QFT dynamics, the QKM computation is executed using a custom fused CUDA kernel:
-
-\begin{itemize}
-    \item Eliminates intermediate tensors for $J_{jk}$ and phase matrices.
-    \item Executes cross-field interactions in registers and shared memory.
-    \item Reduces global memory traffic by up to $25\times$.
-    \item Achieves $12\times$–$24\times$ speedup over PyTorch broadcasting (see Section~\ref{sec:benchmark}).
-\end{itemize}
-
-The fused kernel becomes the computational core, enabling SODA-QFT to evolve populations at previously unreachable scales.
-
-\subsection{Interpretation: Meaning as a Physical Interaction}
-
-By introducing $\Lambda$ into the QFT framework, SODA establishes a new physical interpretation:
-
-\begin{quote}
-\textit{Meaning is modeled as an interaction field, shaping how distributed computational entities interfere, synchronize, and evolve.}
-\end{quote}
-
-This allows SODA-QFT to unify three traditionally separate domains:
+\subsubsection{Structural Evolution via Spinor Fields}
 
 \begin{enumerate}
-    \item \textbf{Physics}: multi-field quantum interactions.
-    \item \textbf{Computation}: GPU-accelerated evolutionary kernels.
-    \item \textbf{Semantics}: meaning-driven guidance for structural evolution.
+    \item \textbf{Field Fusion}: When the system is highly synchronized ($|\mathcal{R}| \to 1$), high-entropy Nuclei ($\mathcal{C}$) fuse into a higher-order **"field condensate"** $\Psi_{\text{fused}}$ (analogous to bound states):
+    \[
+    \Psi_{\text{fused}} = 
+    \frac{
+    \sum_{j \in \mathcal{C}} H_j \Psi_j
+    }{
+    \sum_{j \in \mathcal{C}} H_j
+    }.
+    \]
+    \item \textbf{Semantic Decomposition}: Low-fitness Nuclei are split into offspring, where the perturbation $\epsilon$ is drawn from the semantic geometry, forming the world’s first \textbf{Semantic Quantum Field Evolution Mechanism}:
+    \[
+    \Psi_{j,\text{child}} 
+    = 
+    \Psi_j + \epsilon \cdot \mathcal{N}(0, \mathbf{\Lambda}).
+    \]
 \end{enumerate}
 
-This constitutes a \textbf{Bio-Semantic Quantum Field Theory of Intelligence}, the first of its kind.
+\subsubsection{HPC Fused Kernel Implementation}
+
+To manage the $O(N^2 \cdot F^2)$ complexity of multi-field QKM, the core dynamics are implemented via a custom **CUDA Fused Kernel**:
+
+\begin{itemize}
+    \item The kernel eliminates large intermediate tensors for $J_{jk}$ and phase matrices.
+    \item It utilizes **Shared Memory Tiling** and **Register Accumulation** to execute the $N \times N \times F \times F$ cross-field interactions.
+    \item This design minimizes global memory traffic, achieving a validated $\mathbf{12\times}$–$\mathbf{24\times}$ speedup over PyTorch broadcasting (See Section~\ref{sec:benchmark}).
+\end{itemize}
+
+SODA-QFT successfully unifies **Physics**, **Computation (HPC)**, and **Semantics** into a single, self-evolving architecture, constituting a **Bio-Semantic Quantum Field Theory of Intelligence**.
