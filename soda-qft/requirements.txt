@@ -1,0 +1,6 @@
+torch>=2.0.0
+numpy
+matplotlib
+cairosvg    # optional for SVG->PNG conversion
+deap        # optional (GEP)
+brian2      # optional (SNN)
