@@ -1,0 +1,123 @@
+# Create SVG file for SODA-QFT architecture diagram and save to /mnt/data
+svg_content = r'''<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="1600" height="1200" xmlns="http://www.w3.org/2000/svg" version="1.1">
+  <defs>
+    <style type="text/css"><![CDATA[
+      .box { rx:12; fill:#f6fbff; stroke:#2b7cff; stroke-width:2; }
+      .kernel { rx:14; fill:#e8f3ff; stroke:#1f6fe0; stroke-width:3; }
+      .struct { rx:12; fill:#fff5eb; stroke:#ff8a00; stroke-width:3; }
+      .buffer { rx:10; fill:#f2f2f2; stroke:#9b9b9b; stroke-width:2; }
+      .text { font-family: "DejaVu Sans", "Arial", "Helvetica", sans-serif; font-size:14px; fill:#111; }
+      .title { font-size:18px; font-weight:700; }
+      .small { font-size:12px; fill:#333; }
+      .arrow { stroke:#333; stroke-width:3; fill:none; marker-end: url(#arrowhead); }
+      .dashed { stroke-dasharray:6 6; }
+      .lambda { fill:#f0e6ff; stroke:#7a3cff; stroke-width:2; rx:8; }
+    ]]></style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#333" />
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="60" y="40" class="text title">SODA-QFT Architecture — Quantum Evolution Pipeline</text>
+  <text x="60" y="66" class="text small">Multi-Field Fused QKM Kernel + Semantic Interaction (Λ) + Vectorized Structural Evolution</text>
+
+  <!-- Local Learning block (left top) -->
+  <g id="local_learning">
+    <rect x="60" y="110" width="420" height="180" class="box" style="stroke:#1f9b4a; fill:#eefcf1;"/>
+    <text x="80" y="140" class="text" style="font-size:16px; font-weight:700; fill:#0b5b2f">LOCAL LEARNING (Vectorized)</text>
+    <text x="80" y="168" class="text small">• Compute f_j^{(a)}, H_j^{(a)}, φ_j^{(a)}</text>
+    <text x="80" y="190" class="text small">• Read parameters from W_max (alive_mask selects active)</text>
+    <text x="80" y="212" class="text small">• Output bundle → Fused Kernel</text>
+  </g>
+
+  <!-- Lambda (semantic matrix) box (left middle) -->
+  <g id="lambda">
+    <rect x="60" y="320" width="220" height="90" class="lambda"/>
+    <text x="80" y="350" class="text" style="font-weight:700; fill:#5a2fa8">Λ (Semantic Interaction)</text>
+    <text x="80" y="372" class="text small">• Λ_{ab} from embeddings</text>
+    <text x="80" y="392" class="text small">• Guides inter-field coupling G</text>
+  </g>
+
+  <!-- Fused Kernel big box center -->
+  <g id="kernel">
+    <rect x="520" y="90" width="760" height="420" class="kernel"/>
+    <text x="560" y="120" class="text" style="font-size:18px; font-weight:700">MULTI-FIELD FUSED QKM KERNEL (GPU)</text>
+    <text x="560" y="150" class="text small">O(N² · F²) — Single Fused Kernel, no intermediates</text>
+
+    <!-- internal list -->
+    <text x="560" y="185" class="text small">Inputs:</text>
+    <text x="660" y="185" class="text small">f_j^{(a)}, H_j^{(a)}, φ_j^{(a)}, Ψ_j</text>
+    <text x="560" y="205" class="text small">Tensor:</text>
+    <text x="660" y="205" class="text small">Λ_{ab} (Semantic Interaction)</text>
+
+    <text x="560" y="235" class="text small">Computes:</text>
+    <text x="600" y="255" class="text small">• J_{jk}^{(a,b)} = exp(-|Δf|/T)·exp(-|ΔH|)·Λ_{ab}</text>
+    <text x="600" y="275" class="text small">• S_j^{(a)} = Σ_k Σ_b J_{jk}^{(a,b)} e^{i(φ_k^{(b)}-φ_j^{(a)})} ψ_k^{(b)}</text>
+    <text x="600" y="295" class="text small">• Output: S_j^{(a)} (couplings) and 𝓡(t) (Quantum Order)</text>
+  </g>
+
+  <!-- Arrows from Local Learning to Kernel -->
+  <path d="M 480 200 L 520 200" class="arrow" />
+  <text x="490" y="185" class="text small" style="fill:#0b5b2f">f, H, φ</text>
+
+  <!-- Arrow from Lambda to Kernel -->
+  <path d="M 280 365 L 520 365" class="arrow" />
+  <text x="360" y="350" class="text small" style="fill:#5a2fa8">Λ_{ab}</text>
+
+  <!-- Outputs from Kernel to Structural Evolution -->
+  <path d="M 900 510 L 900 560" class="arrow" />
+  <text x="820" y="540" class="text small">S_j^{(a)}, 𝓡(t)</text>
+
+  <!-- Structural Evolution block (bottom center) -->
+  <g id="struct_evo">
+    <rect x="560" y="560" width="520" height="220" class="struct"/>
+    <text x="580" y="590" class="text" style="font-size:16px; font-weight:700">STRUCTURAL EVOLUTION (Vectorized)</text>
+    <text x="580" y="620" class="text small">• Decomposition (vectorized top-k Worst-3)</text>
+    <text x="580" y="640" class="text small">• Fusion (entropy-weighted spinor fusion)</text>
+    <text x="580" y="660" class="text small">• Update alive_mask → ΔN(t), N(t)</text>
+    <text x="580" y="680" class="text small">• Write new params into W_max (zero-realloc)</text>
+  </g>
+
+  <!-- Arrow from Structural Evolution to W_max buffer -->
+  <path d="M 820 780 L 820 860" class="arrow" />
+  <text x="700" y="820" class="text small">Update params / spawn children</text>
+
+  <!-- W_max Buffer (bottom) -->
+  <g id="buffer">
+    <rect x="220" y="900" width="1160" height="150" class="buffer"/>
+    <text x="260" y="930" class="text" style="font-size:16px; font-weight:700">W_max (Fixed GPU Parameter Buffer)</text>
+    <text x="260" y="952" class="text small">• Pre-allocated N_max × D</text>
+    <text x="260" y="972" class="text small">• alive_mask selects active rows (zero-copy updates)</text>
+    <text x="260" y="992" class="text small">• Read by Local Learning, written by Structural Evolution</text>
+  </g>
+
+  <!-- Arrow from W_max back to Local Learning -->
+  <path d="M 400 900 L 400 720 L 420 720 L 420 300 L 420 290 L 480 290" class="arrow" />
+  <text x="320" y="740" class="text small">Parameters (W_max) → Local Learning</text>
+
+  <!-- Feedback arrow: R(t) -> Structural Evolution (P_dec trigger) -->
+  <path d="M 980 360 C 1060 360, 1060 500, 980 520" class="arrow dashed" />
+  <text x="1000" y="430" class="text small">𝓡(t) → compute P_{Dec}(t)</text>
+
+  <!-- Legend -->
+  <rect x="60" y="1060" width="1480" height="100" fill="#ffffff" stroke="#dddddd" rx="8"/>
+  <text x="80" y="1086" class="text" style="font-weight:700">Legend</text>
+  <text x="240" y="1096" class="text small">Blue box: Quantum Kernel (fused)</text>
+  <text x="480" y="1096" class="text small">Green box: Local Learning</text>
+  <text x="760" y="1096" class="text small">Orange box: Structural Evolution</text>
+  <text x="1020" y="1096" class="text small">Grey bar: W_max buffer (fixed)</text>
+  <text x="1340" y="1096" class="text small">Purple: Semantic Λ</text>
+
+  <!-- Footer note -->
+  <text x="60" y="1175" class="text small">Figure: High-level architecture of SODA-QFT. The fused multi-field QKM kernel integrates semantic interaction Λ into quantum coupling dynamics and drives vectorized structural evolution on GPU.</text>
+
+</svg>
+'''
+
+out_path = "/mnt/data/soda_qft_architecture.svg"
+with open(out_path, "w", encoding="utf-8") as f:
+    f.write(svg_content)
+
+out_path
