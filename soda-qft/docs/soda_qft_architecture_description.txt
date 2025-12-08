@@ -1,0 +1,36 @@
+┌──────────────────────────────────────────────┐
+│  LOCAL LEARNING (Vectorized)                 │
+├──────────────────────────────────────────────┤
+│  → Fitness f_j^{(a)}                         │
+│  → Entropy H_j^{(a)}                         │
+│  → Phase φ_j^{(a)}                           │
+└──────────────────────────────────────────────┘
+                    │
+                    ▼
+┌─────────────────────────────────────────────────────────┐
+│    MULTI-FIELD FUSED QKM KERNEL (GPU, O(N² F²) Fused)   │
+├─────────────────────────────────────────────────────────┤
+│  Inputs:  {f_j^{(a)}, H_j^{(a)}, φ_j^{(a)}, Ψ_j}        │
+│  Tensor:  Λ_ab (Semantic Interaction Matrix)             │
+│                                                         │
+│  Computes:                                              │
+│     • J_{jk}^{(a,b)}  (Semantic + Fitness + Entropy)    │
+│     • S_j^{(a)} = Σ_k Σ_b J_{jk}^{(a,b)} e^{i(Δφ)}      │
+│     • Quantum Order Parameter 𝓡(t)                      │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+                    │
+                    ▼
+┌──────────────────────────────────────────────┐
+│ STRUCTURAL EVOLUTION (Vectorized)            │
+├──────────────────────────────────────────────┤
+│  → Decomposition (Worst-3)                   │
+│  → Fusion (Entropy Weighted Spinor Fusion)   │
+│  → ΔN(t), Update Alive Mask                  │
+└──────────────────────────────────────────────┘
+                    │
+                    ▼
+┌──────────────────────────────────────────────┐
+│   W_MAX PARAMETER BUFFER (Fixed Size GPU)     │
+│   (Direct write: Zero Reallocation)           │
+└──────────────────────────────────────────────┘
