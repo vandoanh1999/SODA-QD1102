@@ -119,4 +119,16 @@ To manage the $O(N^2 \cdot F^2)$ complexity of multi-field QKM, the core dynamic
     \item This design minimizes global memory traffic, achieving a validated $\mathbf{12\times}$–$\mathbf{24\times}$ speedup over PyTorch broadcasting (See Section~\ref{sec:benchmark}).
 \end{itemize}
 
+% --- VỊ TRÍ CHÈN SƠ ĐỒ KIẾN TRÚC ---
+\begin{figure}[!ht]
+    \centering
+    % Lệnh chèn file hình ảnh kiến trúc SODA-QFT
+    \includegraphics[width=\textwidth]{figures/soda_qft_architecture.pdf} 
+    
+    \caption{Figure X: The SODA-QFT Architecture. Local learning computes fitness, entropy, and phases. The Multi-Field Fused QKM Kernel integrates quantum interactions across semantic fields via $\Lambda_{ab}$ and produces coupling dynamics and a global order parameter. Structural Evolution applies quantum tunneling–driven decomposition and entropy-weighted fusion, while the fixed GPU buffer $W_{\max}$ enables zero-reallocation growth following the SODA Law.}
+    
+    \label{fig:soda-qft-architecture}
+\end{figure}
+% --- KẾT THÚC CHÈN SƠ ĐỒ ---
+
 SODA-QFT successfully unifies **Physics**, **Computation (HPC)**, and **Semantics** into a single, self-evolving architecture, constituting a **Bio-Semantic Quantum Field Theory of Intelligence**.
