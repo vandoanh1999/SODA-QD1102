@@ -1,0 +1,63 @@
+# compute_semantic_interaction_matrix.py
+import torch
+import torch.nn.functional as F
+
+def compute_semantic_interaction_matrix(field_embeddings, method="cosine", temperature=0.07):
+    """
+    Compute Lambda_ab from per-field semantic embeddings or statistics.
+
+    Inputs:
+      field_embeddings: tensor (F, E) or list of F embedding tensors (E-dim) describing semantic footprint of each field.
+                        Example: compute embeddings by aggregating per-nucleus feature activations for that field.
+      method: "cosine" | "jsd" (Jensen-Shannon divergence on distributions) | "mutual_info" (estimation)
+      temperature: scaling factor
+
+    Output:
+      Lambda: (F, F) symmetric matrix in [0,1] where high value => high semantic overlap/relatedness
+    """
+    if isinstance(field_embeddings, list):
+        X = torch.stack(field_embeddings, dim=0)
+    else:
+        X = field_embeddings
+
+    Fnum, E = X.shape
+    # normalize
+    X_norm = F.normalize(X, p=2, dim=1)
+
+    if method == "cosine":
+        sim = torch.matmul(X_norm, X_norm.t())  # cosine similarity in [-1,1]
+        # map [-1,1] -> [0,1]
+        Lambda = (sim + 1.0) * 0.5
+        # sharpen with temperature
+        Lambda = torch.softmax(Lambda / temperature, dim=1)
+        # symmetrize
+        Lambda = 0.5 * (Lambda + Lambda.t())
+        return Lambda
+
+    elif method == "jsd":
+        # assume X rows are histogram-like (non-negative)
+        P = F.softmax(X, dim=1) + 1e-12
+        M = 0.5 * (P.unsqueeze(1) + P.unsqueeze(0))  # (F,F,E)
+        # KL(P||M)
+        KL1 = (P.unsqueeze(1) * (P.unsqueeze(1).log() - M.log())).sum(dim=2)
+        KL2 = (P.unsqueeze(0) * (P.unsqueeze(0).log() - M.log())).sum(dim=2)
+        JSD = 0.5 * (KL1 + KL2)   # (F,F)
+        # map to similarity [0,1]: smaller JSD -> larger similarity
+        Lambda = torch.exp(-JSD / (temperature + 1e-12))
+        Lambda = 0.5 * (Lambda + Lambda.t())
+        return Lambda
+
+    else:
+        raise ValueError("Unknown method")
+
+
+def semantic_to_G(Lambda, base_scale=1.0, learnable_scale=None):
+    """
+    Convert Lambda (semantic interaction) to G (inter-field coupling).
+    Optionally multiply by base_scale or learnable parameter.
+    """
+    if learnable_scale is None:
+        G = base_scale * Lambda
+    else:
+        G = (learnable_scale.view(1,1) * Lambda)
+    return G
