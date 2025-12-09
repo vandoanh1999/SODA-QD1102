@@ -1,0 +1,230 @@
+#!/usr/bin/env python3
+"""
+src/gitkep -- fast utility to manage .gitkeep files in a repo tree.
+
+Features:
+- Create .gitkeep in empty directories (default).
+- Remove .gitkeep from directories that are no longer empty.
+- Dry-run mode.
+- Exclude patterns (glob).
+- Parallel I/O via ThreadPool for speed.
+- Uses os.scandir for efficient directory scanning.
+- Cross-platform, Python 3.8+.
+
+Usage:
+  src/gitkep [--root PATH] [--create|--remove] [--dry-run] [--exclude PATTERN ...] [--max-workers N]
+
+Examples:
+  src/gitkep --root .           # create .gitkeep in empty dirs under cwd
+  src/gitkep --remove --dry-run # show .gitkeep candidates to remove
+"""
+
+from __future__ import annotations
+import argparse
+import concurrent.futures
+import fnmatch
+import os
+from pathlib import Path
+import sys
+from typing import Iterable, List, Tuple
+
+GITKEEP_NAME = ".gitkeep"
+
+def iter_dirs(root: Path) -> Iterable[Path]:
+    """Yield directories under root (including root), non-recursive scanner uses stack to minimize overhead."""
+    stack = [root]
+    while stack:
+        d = stack.pop()
+        yield d
+        try:
+            with os.scandir(d) as it:
+                for entry in it:
+                    if entry.is_dir(follow_symlinks=False):
+                        stack.append(Path(entry.path))
+        except PermissionError:
+            continue
+
+def matches_exclude(path: Path, exclude_patterns: List[str]) -> bool:
+    if not exclude_patterns:
+        return False
+    s = str(path)
+    for p in exclude_patterns:
+        # allow matching on basename or full path
+        if fnmatch.fnmatch(path.name, p) or fnmatch.fnmatch(s, p):
+            return True
+    return False
+
+def is_dir_empty(dirpath: Path, ignore_names: Tuple[str, ...] = (GITKEEP_NAME, )) -> bool:
+    """Return True if directory contains no files/directories other than ignored names."""
+    try:
+        with os.scandir(dirpath) as it:
+            for e in it:
+                # ignore .git and ephemeral VCS dirs
+                if e.name == ".git":
+                    return False
+                # ignore our placeholders
+                if e.name in ignore_names:
+                    continue
+                # if any entry that's not ignored exists, not empty
+                return False
+    except PermissionError:
+        # If no permission to list, treat as non-empty to avoid accidental writes
+        return False
+    return True
+
+def collect_create_remove_candidates(root: Path, excludes: List[str]) -> Tuple[List[Path], List[Path]]:
+    """Return (to_create, to_remove) where to_create are dirs that should get .gitkeep,
+       to_remove are paths of existing .gitkeep files in dirs that are non-empty (so can be removed)."""
+    to_create: List[Path] = []
+    to_remove: List[Path] = []
+
+    for d in iter_dirs(root):
+        if matches_exclude(d, excludes):
+            continue
+        # skip VCS metadata dirs
+        if d.name == ".git":
+            continue
+        gk = d / GITKEEP_NAME
+        if gk.exists():
+            # if .gitkeep exists but dir contains other files, mark for removal
+            # consider hidden files except .gitkeep as "non-empty"
+            if not is_dir_empty(d, ignore_names=(GITKEEP_NAME,)):
+                to_remove.append(gk)
+        else:
+            # if .gitkeep missing and dir is empty, candidate for creation
+            if is_dir_empty(d, ignore_names=(GITKEEP_NAME,)):
+                to_create.append(gk)
+    return to_create, to_remove
+
+def safe_write_gitkeep(path: Path) -> bool:
+    """Create file atomically if not exists. Return True if created."""
+    try:
+        if path.exists():
+            return False
+        # create parent exists already; using 'x' mode avoids race and will error if exists
+        with open(path, "x", encoding="utf-8") as f:
+            f.write("")  # intentionally empty
+        return True
+    except FileExistsError:
+        return False
+    except Exception:
+        return False
+
+def safe_remove(path: Path) -> bool:
+    """Remove file if exists and is a regular file. Return True if removed."""
+    try:
+        if not path.exists():
+            return False
+        if not path.is_file():
+            return False
+        path.unlink()
+        return True
+    except Exception:
+        return False
+
+def run_create_remove(
+    to_create: List[Path],
+    to_remove: List[Path],
+    dry_run: bool,
+    max_workers: int = 8
+) -> Tuple[int, int]:
+    created = 0
+    removed = 0
+    # create
+    if to_create:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
+            futures = {ex.submit(safe_write_gitkeep, p): p for p in to_create}
+            for fut in concurrent.futures.as_completed(futures):
+                p = futures[fut]
+                try:
+                    ok = fut.result()
+                except Exception:
+                    ok = False
+                if ok:
+                    if dry_run:
+                        print("[DRY-RUN] create:", p)
+                    else:
+                        print("create:", p)
+                    created += 1
+                else:
+                    # if failed but dry-run, still show candidate
+                    if dry_run:
+                        print("[DRY-RUN] skip/create-candidate:", p)
+
+    # remove
+    if to_remove:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
+            futures = {ex.submit(safe_remove, p): p for p in to_remove}
+            for fut in concurrent.futures.as_completed(futures):
+                p = futures[fut]
+                try:
+                    ok = fut.result()
+                except Exception:
+                    ok = False
+                if ok:
+                    if dry_run:
+                        print("[DRY-RUN] remove:", p)
+                    else:
+                        print("remove:", p)
+                    removed += 1
+                else:
+                    if dry_run:
+                        print("[DRY-RUN] skip/remove-candidate:", p)
+    return created, removed
+
+def parse_args(argv: List[str]) -> argparse.Namespace:
+    p = argparse.ArgumentParser(prog="gitkep", description="Manage .gitkeep files efficiently")
+    p.add_argument("--root", "-r", type=str, default=".", help="Root path to scan")
+    group = p.add_mutually_exclusive_group()
+    group.add_argument("--create", action="store_true", help="Create .gitkeep in empty dirs (default)")
+    group.add_argument("--remove", action="store_true", help="Remove .gitkeep files in non-empty dirs")
+    p.add_argument("--dry-run", "-n", action="store_true", help="Show actions without performing")
+    p.add_argument("--exclude", "-e", nargs="*", default=[], help="Glob patterns to exclude (basename or path)")
+    p.add_argument("--max-workers", "-j", type=int, default=8, help="Max worker threads (I/O ops)")
+    p.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
+    return p.parse_args(argv)
+
+def main(argv: List[str]) -> int:
+    args = parse_args(argv)
+    root = Path(args.root).resolve()
+
+    if not root.exists():
+        print("Root path does not exist:", root, file=sys.stderr)
+        return 2
+    if not root.is_dir():
+        print("Root path is not a directory:", root, file=sys.stderr)
+        return 2
+
+    # Determine candidates
+    to_create, to_remove = collect_create_remove_candidates(root, args.exclude)
+
+    # If explicit mode remove, only remove list; if create only create; default create
+    if args.create:
+        do_create = True
+        do_remove = False
+    elif args.remove:
+        do_create = False
+        do_remove = True
+    else:
+        # default: create .gitkeep in empty dirs, and also remove lingering .gitkeep in non-empty dirs
+        do_create = True
+        do_remove = True
+
+    create_list = to_create if do_create else []
+    remove_list = to_remove if do_remove else []
+
+    if args.verbose:
+        print(f"Root: {root}")
+        print("Exclude patterns:", args.exclude)
+        print(f"Candidates to create: {len(create_list)}")
+        print(f"Candidates to remove: {len(remove_list)}")
+
+    if args.dry_run:
+        print("=== DRY RUN ===")
+    created, removed = run_create_remove(create_list, remove_list, args.dry_run, max_workers=args.max_workers)
+
+    print(f"Done. created={created} removed={removed}")
+    return 0
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))
